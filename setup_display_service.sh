@@ -45,8 +45,10 @@ ensure_i2c() {
     raspi-config nonint do_i2c 0 || true
   fi
   
-apt-get update -y >/dev/null 2>&1 || true
-apt-get install -y i2c-tools >/dev/null 2>&1 || true
+  if ! command -v i2cdetect >/dev/null 2>&1; then
+    apt-get update -y >/dev/null 2>&1 || true
+    apt-get install -y i2c-tools >/dev/null 2>&1 || true
+  fi
 
   # Ensure dtparam is set (Bookworm usually uses /boot/firmware/config.txt)
   local cfg=""
