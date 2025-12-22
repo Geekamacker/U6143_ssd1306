@@ -24,7 +24,7 @@ extern int i2cd;
 #define IP_DISPLAY_OPEN     0
 #define IP_DISPLAY_CLOSE    1
 #define IP_SWITCH       IP_DISPLAY_OPEN
-#define CUSTOM_DISPLAY   "PI_HOLE"
+#define CUSTOM_DISPLAY   "UCTRONICS"
 /************************Turn off the IP display. Can customize the display****************/
 
 #define BLACK 0
