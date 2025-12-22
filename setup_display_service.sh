@@ -36,6 +36,63 @@ if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ]; then
 fi
 echo "Detected user invoking sudo as '$SUDO_USER', with home directory: $USER_HOME"
 
+ensure_i2c() {
+  echo "Checking I2C..."
+
+
+  # Enable I2C using raspi-config when available (official toggle)
+  if command -v raspi-config >/dev/null 2>&1; then
+    raspi-config nonint do_i2c 0 || true
+  fi
+  
+apt-get update -y >/dev/null 2>&1 || true
+apt-get install -y i2c-tools >/dev/null 2>&1 || true
+
+  # Ensure dtparam is set (Bookworm usually uses /boot/firmware/config.txt)
+  local cfg=""
+  [ -f /boot/firmware/config.txt ] && cfg="/boot/firmware/config.txt"
+  [ -z "$cfg" ] && [ -f /boot/config.txt ] && cfg="/boot/config.txt"
+
+  local changed=0
+  if [ -n "$cfg" ]; then
+    if ! grep -qE '^\s*dtparam=i2c_arm=on(\s|$)' "$cfg"; then
+      echo "Enabling dtparam=i2c_arm=on in $cfg"
+      echo "dtparam=i2c_arm=on" >> "$cfg"
+      changed=1
+    fi
+  else
+    echo "WARNING: Could not find config.txt to persist I2C enable."
+  fi
+
+  # Load modules now (so it can work without reboot when possible)
+  modprobe i2c-dev 2>/dev/null || true
+  modprobe i2c-bcm2835 2>/dev/null || true
+
+  # Make sure /dev/i2c-1 exists
+  if [ ! -e /dev/i2c-1 ]; then
+    echo "WARNING: /dev/i2c-1 not found."
+    if [ "$changed" -eq 1 ]; then
+      echo "I2C was enabled in config, but a reboot is required for it to take effect."
+    else
+      echo "I2C may be disabled or the kernel modules did not load."
+    fi
+    echo "After reboot, verify with: ls -l /dev/i2c-*"
+  else
+    echo "I2C looks enabled: /dev/i2c-1 exists."
+  fi
+
+  # Optional: quick scan if i2c-tools exists
+  if command -v i2cdetect >/dev/null 2>&1; then
+    echo "Scanning I2C bus 1 (may show 0x3C for SSD1306)..."
+    i2cdetect -y 1 || true
+  else
+    echo "Tip: install i2c-tools for easy checks: sudo apt install -y i2c-tools"
+  fi
+}
+
+
+ensure_i2c
+
 # 3. Define paths
 REPO_BASE_DIR="$USER_HOME/$REPO_NAME"
 C_DIR="$REPO_BASE_DIR/C"      # Directory containing C source code and Makefile
@@ -99,7 +156,9 @@ cat << EOF > "$SERVICE_FILE"
 [Unit]
 Description=UCTRONICS C Display Service ($REPO_NAME)
 # Start after basic system initialization and multi-user environment is up
-After=multi-user.target
+After=network-online.target
+Wants=network-online.target
+
 
 [Service]
 # Consider changing User= to $SUDO_USER if root privileges are not strictly required
