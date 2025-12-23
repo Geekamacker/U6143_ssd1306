@@ -22,9 +22,69 @@ Pages rotate in order `0..5`:
 
 ---
 
+## Ubuntu on Raspberry Pi notes (if needed)
+
+This repo works on **Ubuntu on Raspberry Pi** (Server/Desktop), with a couple of extra prerequisites.
+
+### 1) Install prerequisites
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git build-essential i2c-tools
+```
+
+- `build-essential` provides `make` + `gcc` needed to compile.
+- `i2c-tools` provides `i2cdetect` for quick verification.
+
+### 2) Enable I2C (Ubuntu on Pi)
+
+Ubuntu Pi images commonly use:
+
+- `/boot/firmware/config.txt`
+
+```bash
+sudo nano /boot/firmware/config.txt
+```
+
+Make sure this line exists:
+
+```txt
+dtparam=i2c_arm=on
+```
+
+Reboot after enabling:
+
+```bash
+sudo reboot
+```
+
+### 3) Verify the OLED is detected
+
+```bash
+ls -l /dev/i2c-*
+sudo apt-get update
+sudo apt-get install -y i2c-tools
+sudo i2cdetect -y 1
+```
+
+You will typically see `3c` (the SSD1306 default I2C address) if wiring/address is correct.
+
+> On Ubuntu, `raspi-config` may not be installed, so the installer will skip that part automatically.
+
+---
+
+
 ## Install
 
-### 1) Clone this repo
+### 1) Install Git
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+sudo apt-get install -y build-essential
+```
+
+### 2) Clone this repo
 
 ```bash
 cd ~
@@ -32,11 +92,17 @@ git clone https://github.com/Geekamacker/U6143_ssd1306.git
 cd U6143_ssd1306
 ```
 
-### 2) Run the installer
+### 3) Run the installer
 
 ```bash
+cd ~/U6143_ssd1306
 chmod +x setup_display_service.sh
 sudo ./setup_display_service.sh
+```
+
+### 3) Run the installer
+```bash
+sudo systemctl status uctronics-display.service --no-pager
 ```
 
 The installer will:
@@ -49,6 +115,7 @@ The installer will:
 > If the script reports I2C was enabled in config, a **reboot may be required**.
 
 ---
+
 
 ## Service management
 
@@ -155,16 +222,4 @@ ls -la ~ | grep U6143
 
 ### 4) Install this fork
 
-```bash
-cd ~
-git clone https://github.com/Geekamacker/U6143_ssd1306.git
-cd U6143_ssd1306
-chmod +x setup_display_service.sh
-sudo ./setup_display_service.sh
-```
-
-### 5) Verify it’s running
-
-```bash
-sudo systemctl status uctronics-display.service
-```
+Follow the steps from the install section.
