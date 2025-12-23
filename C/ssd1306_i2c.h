@@ -10,7 +10,7 @@ extern int i2cd;
 /**********Select display temperature type**************/
 #define CELSIUS       0
 #define FAHRENHEIT    1
-#define TEMPERATURE_TYPE  FAHRENHEIT
+#define TEMPERATURE_TYPE  CELSIUS
 /**********Select display temperature type**************/
 
 /**********Select display network IP type**************/
