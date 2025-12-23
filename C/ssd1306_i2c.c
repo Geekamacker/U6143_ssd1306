@@ -217,6 +217,31 @@ void OLED_DrawPartBMP(unsigned char x0, unsigned char y0,unsigned char x1, unsig
 }
 
 /*
+*       Get the IP Address automatically
+*/
+
+static const char* GetIpAddressAuto(void)
+{
+  static char ip[32] = {0};
+
+  FILE *fp = popen(
+    "ip -4 route get 1.1.1.1 2>/dev/null | "
+    "awk '{for(i=1;i<=NF;i++) if($i==\"src\"){print $(i+1); exit}}'",
+    "r"
+  );
+  if (!fp) return "0.0.0.0";
+
+  if (!fgets(ip, sizeof(ip), fp)) { pclose(fp); return "0.0.0.0"; }
+  pclose(fp);
+
+  ip[strcspn(ip, "\r\n")] = 0;
+  return (ip[0] ? ip : "0.0.0.0");
+}
+
+
+
+
+/*
 *       Clear specified row
 */
 void OLED_ClearLint(unsigned char x1,unsigned char x2)
@@ -458,33 +483,16 @@ static long CountMmcCmdErr110(void)
   return strtol(buf, NULL, 10);
 }
 
+
 /*
 *  Draw top line (IP or CUSTOM_DISPLAY). Keeps IP consistent on all pages.
 */
 static void OLED_DrawTopLine(void)
 {
-  const char *ip = NULL;
-
-  // try the configured interface first
-  ip = GetIpAddress();
-
-  // if it's not useful, try the other interface
-  if (!ip || strcmp(ip, "0.0.0.0") == 0) {
-    int saved = IPADDRESS_TYPE;
-
-    // temporarily flip interface choice
-    // (ETH0_ADDRESS=0, WLAN0_ADDRESS=1)
-    #undef IPADDRESS_TYPE
-    #define IPADDRESS_TYPE WLAN0_ADDRESS
-    ip = GetIpAddress();
-
-    // NOTE: if you don't want this macro trick, tell me and I'll show a cleaner version.
-  }
-
   if (IP_SWITCH == IP_DISPLAY_OPEN)
   {
-    strncpy(IPSource, ip ? ip : "IP:NA", sizeof(IPSource)-1);
-    IPSource[sizeof(IPSource)-1] = '\0';
+    strncpy(IPSource, GetIpAddressAuto(), sizeof(IPSource) - 1);
+    IPSource[sizeof(IPSource) - 1] = '\0';
     OLED_ShowString(0, 0, (unsigned char*)IPSource, 8);
   }
   else
@@ -492,7 +500,6 @@ static void OLED_DrawTopLine(void)
     OLED_ShowString(0, 0, (unsigned char*)CUSTOM_DISPLAY, 8);
   }
 }
-
 
 
 
