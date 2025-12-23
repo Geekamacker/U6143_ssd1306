@@ -1,6 +1,6 @@
 # U6143_ssd1306 (Geekamacker fork)
 
-UCTRONICS 0.91" SSD1306 I2C OLED display + systemd service installer, with a rotating multi-page status dashboard.  
+UCTRONICS 0.91\" SSD1306 I2C OLED display + a **systemd** service installer, with a rotating multi-page status dashboard.  
 This fork also supports **time-synced page rotation** so multiple Raspberry Pis can stay aligned.
 
 ---
@@ -10,13 +10,15 @@ This fork also supports **time-synced page rotation** so multiple Raspberry Pis 
 Pages rotate in order `0..5`:
 
 - **Page 0**: CPU Temperature + CPU Load  
-- **Page 1**: RAM (USED / TOTAL)  
-- **Page 2**: SD card storage (USED / TOTAL)  
+- **Page 1**: RAM (**USED / TOTAL**)  
+- **Page 2**: SD card storage (**USED / TOTAL**)  
 - **Page 3**: Hostname + Date/Time  
-- **Page 4**: MAC Address + Ping 8.8.8.8 (OK/FAIL)  
-- **Page 5**: SD card / MMC `cmd error -110` count + days since last  
+- **Page 4**: MAC Address + Ping `8.8.8.8` (**OK/FAIL**)  
+- **Page 5**: SD card / MMC `cmd error -110` **count** + **days since last**
 
-Top line shows **IP address** (or `CUSTOM_DISPLAY`) across pages.
+**Top line:** shows the Pi’s IP address (or your custom label via `CUSTOM_DISPLAY`) across all pages.
+
+> **IP note (this fork):** IP is detected automatically from the default route, so it works even if your interface isn’t `eth0`/`wlan0`.
 
 ---
 
@@ -30,7 +32,7 @@ git clone https://github.com/Geekamacker/U6143_ssd1306.git
 cd U6143_ssd1306
 ```
 
-### 2) Run `setup_display_service.sh`
+### 2) Run the installer
 
 ```bash
 chmod +x setup_display_service.sh
@@ -61,7 +63,8 @@ sudo journalctl -u uctronics-display.service -f
 
 ## Multi-Pi synced page rotation
 
-Page selection can be based on wall clock time so multiple Pis show the same page at the same time.  
+Page selection can be based on wall clock time so multiple Pis show the same page at the same time.
+
 Make sure time is synced:
 
 ```bash
@@ -72,10 +75,11 @@ Look for: `System clock synchronized: yes`
 
 ---
 
-## For older 0.91 inch LCD without MCU (Python demo)
+## For older 0.91\" LCD without MCU (Python demo)
 
-- For the older version LCD without MCU controller, you can use the python demo.
-- Install dependent libraries:
+For the older version LCD without MCU controller, you can use the Python demo.
+
+Install dependent libraries:
 
 ```bash
 sudo apt-get update
@@ -83,7 +87,7 @@ sudo apt-get install -y python3-pip python3-pil
 sudo pip3 install adafruit-circuitpython-ssd1306
 ```
 
-- Test demo:
+Test demo:
 
 ```bash
 cd ~/U6143_ssd1306/python
@@ -92,27 +96,75 @@ sudo python3 ssd1306_stats.py
 
 ---
 
-## Custom display temperature type
+## Configuration
 
-Open `C/ssd1306_i2c.h`.  
-Modify `TEMPERATURE_TYPE` to change the temperature type displayed.
+### Temperature unit (Celsius vs Fahrenheit)
+
+Open `C/ssd1306_i2c.h` and modify `TEMPERATURE_TYPE`.
 
 ![EasyBehavior](https://github.com/UCTRONICS/pic/blob/master/OLED/select_temperature.jpg)
 
----
+### Top line: IP vs custom label
 
-## Custom display IPADDRESS_TYPE type
+Open `C/ssd1306_i2c.h`:
 
-Open `C/ssd1306_i2c.h`.  
-Modify `IPADDRESS_TYPE` to change which interface IP is displayed.
-
-![EasyBehavior](https://github.com/UCTRONICS/pic/blob/master/OLED/select_ip.jpg)
-
----
-
-## Custom display information (IP vs label)
-
-Open `C/ssd1306_i2c.h`.  
-Modify `IP_SWITCH` to display the IP address or a custom label (`CUSTOM_DISPLAY`).
+- Set `IP_SWITCH` to show IP or `CUSTOM_DISPLAY`
+- Set `CUSTOM_DISPLAY` to your label (example: `"GEEKAPI"`)
 
 ![EasyBehavior](https://github.com/UCTRONICS/pic/blob/master/OLED/custom_display.jpg)
+
+---
+
+## Uninstall / switch from upstream to this fork
+
+If you installed the upstream UCTRONICS repo first and want to remove it cleanly:
+
+### 1) Stop + disable the service
+
+```bash
+sudo systemctl stop uctronics-display.service
+sudo systemctl disable uctronics-display.service
+```
+
+### 2) Remove the service file + reload systemd
+
+```bash
+sudo rm -f /etc/systemd/system/uctronics-display.service
+sudo systemctl daemon-reload
+```
+
+(Optional) confirm it’s gone:
+
+```bash
+systemctl status uctronics-display.service
+```
+
+### 3) Remove the old repo folder
+
+If the old one is in `~/U6143_ssd1306`:
+
+```bash
+rm -rf ~/U6143_ssd1306
+```
+
+(Optional) list matching folders first:
+
+```bash
+ls -la ~ | grep U6143
+```
+
+### 4) Install this fork
+
+```bash
+cd ~
+git clone https://github.com/Geekamacker/U6143_ssd1306.git
+cd U6143_ssd1306
+chmod +x setup_display_service.sh
+sudo ./setup_display_service.sh
+```
+
+### 5) Verify it’s running
+
+```bash
+sudo systemctl status uctronics-display.service
+```
