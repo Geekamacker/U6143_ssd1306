@@ -109,7 +109,7 @@ chmod +x setup_display_service.sh
 sudo ./setup_display_service.sh
 ```
 
-### 4) Run the installer
+### 5) Verify it’s running
 ```bash
 sudo systemctl status uctronics-display.service --no-pager
 ```
