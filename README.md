@@ -109,7 +109,7 @@ chmod +x setup_display_service.sh
 sudo ./setup_display_service.sh
 ```
 
-### 3) Run the installer
+### 4) Run the installer
 ```bash
 sudo systemctl status uctronics-display.service --no-pager
 ```
@@ -122,6 +122,16 @@ The installer will:
 - Compile the C program and set up the `uctronics-display` systemd service
 
 > If the script reports I2C was enabled in config, a **reboot may be required**.
+
+### 4) Syncing in a display cluster
+
+This will refresh/force timesync in a diskless set up.
+
+```bash
+timedatectl timesync-status || true
+systemctl status systemd-timesyncd --no-pager || true
+journalctl -u systemd-timesyncd -b --no-pager | tail -n 120
+```
 
 ---
 
