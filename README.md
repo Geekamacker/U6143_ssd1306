@@ -45,6 +45,15 @@ Ubuntu Pi images commonly use:
 ```bash
 sudo nano /boot/firmware/config.txt
 ```
+or
+
+if diskless:
+
+- `/boot/firmware/config.txt`
+
+```bash
+sudo nano /boot/config.txt
+```
 
 Make sure this line exists:
 
