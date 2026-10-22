@@ -8,7 +8,7 @@ Demo for ssd1306 i2c driver for Raspberry Pi
 
 #define DEBUG 0
 
-#define DISTINCT_DISPLAYS 6
+#define DISTINCT_DISPLAYS 7
 #define SECONDS_TO_DISPLAY 3
 
 static unsigned char select_display(void)
@@ -17,7 +17,7 @@ static unsigned char select_display(void)
     clock_gettime(CLOCK_REALTIME, &now);
 
     long slot = now.tv_sec / SECONDS_TO_DISPLAY;          // advances every N seconds
-    return (unsigned char)(slot % DISTINCT_DISPLAYS);     // 0..5
+    return (unsigned char)(slot % DISTINCT_DISPLAYS);     // 0..6
 }
 
 static void sleep_until_next_change(void)

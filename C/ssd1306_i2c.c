@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 
 
 char IPSource[20]={0};
@@ -468,19 +469,41 @@ static int Ping8888(void)
 }
 
 /*
-*  Helper: count MMC cmd error -110 occurrences in kernel log (journalctl -k)
-*  Returns >=0 count, or -1 if it can't run/read.
+*  Count actual MMC cmd error -110 messages from THIS boot.
+*  Quiet mode prevents journalctl's "-- No entries --" line being counted.
+*  Collect the latest timestamp in the same query and always pclose().
+*  Returns 0 on success, -1 if journalctl could not be started/read.
 */
-static long CountMmcCmdErr110(void)
+static int ReadMmcCmdErr110(long *count, long *days_since_last)
 {
-  FILE *fp = popen("journalctl -k --no-pager --grep \"cmd error -110\" 2>/dev/null | wc -l", "r");
+  FILE *fp = popen(
+      "journalctl --quiet -k --no-pager --grep='cmd error -110' -o short-unix 2>/dev/null",
+      "r");
   if (!fp) return -1;
 
-  char buf[64] = {0};
-  if (!fgets(buf, sizeof(buf), fp)) { pclose(fp); return -1; }
-  pclose(fp);
+  char line[512];
+  long total = 0;
+  time_t last = 0;
+  while (fgets(line, sizeof(line), fp)) {
+    double timestamp = 0.0;
+    if (sscanf(line, "%lf", &timestamp) == 1) {
+      total++;
+      last = (time_t)timestamp;
+    }
+  }
+  int read_failed = ferror(fp);
+  int status = pclose(fp);
+  /* grep with zero matches can return 1; command failures must be visible. */
+  if (status == -1 || read_failed) return -1;
+  if (!WIFEXITED(status) || WEXITSTATUS(status) > 1) return -1;
 
-  return strtol(buf, NULL, 10);
+  *count = total;
+  *days_since_last = -1;
+  if (total > 0) {
+    time_t now = time(NULL);
+    *days_since_last = now <= last ? 0 : (long)((now - last) / 86400);
+  }
+  return 0;
 }
 
 
@@ -543,51 +566,24 @@ static void LCD_PageMacPing(void)
 
 
 /*
-*  Helper: days since last MMC cmd error -110 (timeout)
-*  Returns:
-*    >=0  days since last occurrence
-*    -1   never seen (no matching log lines)
-*    -2   cannot read journal / parse timestamp
-*/
-static long LastMmcCmdErr110AgeDays(void)
-{
-  FILE *fp = popen("journalctl -k --no-pager --grep \"cmd error -110\" -n 1 -o short-unix 2>/dev/null", "r");
-  if (!fp) return -2;
-
-  char line[256] = {0};
-  if (!fgets(line, sizeof(line), fp)) { pclose(fp); return -1; }
-  pclose(fp);
-
-  double ts = 0.0;                 // journal prints: 1700000000.123456 ...
-  if (sscanf(line, "%lf", &ts) != 1) return -2;
-
-  time_t now = time(NULL);
-  time_t then = (time_t)ts;
-  if (now <= then) return 0;
-
-  return (long)((now - then) / 86400);
-}
-
-
-
-/*
 *  Page: SD card error count + days since last (MMC cmd error -110)
 */
 static void LCD_PageMmcErr110(void)
 {
-  long cnt  = CountMmcCmdErr110();
-  long days = LastMmcCmdErr110AgeDays();
+  long cnt = 0;
+  long days = -1;
+  int err = ReadMmcCmdErr110(&cnt, &days);
 
   char line1[32] = {0};
   char line2[32] = {0};
 
 
-  if (cnt < 0) {
-    snprintf(line1, sizeof(line1), "SD ERR (journal NA)");
-    snprintf(line2, sizeof(line2), "");
+  if (err < 0) {
+    snprintf(line1, sizeof(line1), "SD LOG UNAVAIL");
+    line2[0] = '\0';
   } else if (cnt == 0) {
     snprintf(line1, sizeof(line1), "SD ERR Count: 0");
-    snprintf(line2, sizeof(line2), "");
+    line2[0] = '\0';
   } else {
     snprintf(line1, sizeof(line1), "Count: %ld", cnt);
     if (days >= 0) snprintf(line2, sizeof(line2), "Days Ago: %ld", days);
@@ -599,6 +595,34 @@ static void LCD_PageMmcErr110(void)
   OLED_ShowString(0, 3, (unsigned char*)line2, 8);
 }
 
+
+
+/*
+*  Previous-boot evidence snapshot, written by boot_diagnostics.sh.
+*  Two 16-character lines fit in the 128x32 OLED under the IP header.
+*  An unclean shutdown with no identifiable log is explicitly UNKNOWN.
+*/
+static void LCD_PageLastBoot(void)
+{
+  char line1[32] = "PREV: NO DATA";
+  char line2[32] = "LOG: UNKNOWN";
+  FILE *fp = fopen("/var/lib/uctronics-display/last_boot_status", "r");
+  if (fp) {
+    char buffer[128];
+    if (fgets(buffer, sizeof(buffer), fp)) {
+      buffer[strcspn(buffer, "\r\n")] = '\0';
+      snprintf(line1, sizeof(line1), "%.16s", buffer);
+    }
+    if (fgets(buffer, sizeof(buffer), fp)) {
+      buffer[strcspn(buffer, "\r\n")] = '\0';
+      snprintf(line2, sizeof(line2), "%.16s", buffer);
+    }
+    fclose(fp);
+  }
+  OLED_ClearLint(2,4);
+  OLED_ShowString(0, 2, (unsigned char *)line1, 8);
+  OLED_ShowString(0, 3, (unsigned char *)line2, 8);
+}
 
 
 /*
@@ -620,6 +644,7 @@ void LCD_Display(unsigned char symbol)
     case 3: LCD_PageHostTime();       break;
     case 4: LCD_PageMacPing();        break;
     case 5: LCD_PageMmcErr110();      break;
+    case 6: LCD_PageLastBoot();       break;
     default:
     break;
   }
