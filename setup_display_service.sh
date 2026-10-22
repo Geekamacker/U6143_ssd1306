@@ -7,7 +7,7 @@ SERVICE_NAME="uctronics-display"
 DIAG_NAME="uctronics-boot-diagnostics"
 DIAG_FILE="/etc/systemd/system/${DIAG_NAME}.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-REPO_NAME="U6143_ssd1306" # Name of the repository directory
+REPO_NAME="U6143_ssd1306" # Service display name (not a required directory name)
 
 echo "--- UCTRONICS C Display Systemd Service Setup Script ---"
 
@@ -97,13 +97,14 @@ ensure_i2c() {
 
 ensure_i2c
 
-# 3. Define paths
-REPO_BASE_DIR="$USER_HOME/$REPO_NAME"
+# 3. Define paths. Derive from this script so GitHub Releases can be
+# installed in versioned directories without overwriting an existing clone.
+REPO_BASE_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 C_DIR="$REPO_BASE_DIR/C"      # Directory containing C source code and Makefile
 MAKEFILE_PATH="$C_DIR/Makefile"  # Full path to the Makefile
 EXECUTABLE_PATH="$C_DIR/display" # Path to the compiled executable
 
-echo "Assuming C program path: $C_DIR"
+echo "Using C program path: $C_DIR"
 echo "Assuming Makefile path: $MAKEFILE_PATH"
 # --- Dynamic Path Configuration End ---
 
@@ -126,9 +127,11 @@ fi
 echo "Compiling the C program in $C_DIR..."
 # Run make clean and make as the original user to handle potential build requirements
 # Note: If make requires root, this needs adjustment, but usually build doesn't.
-sudo -u "$SUDO_USER" make -C "$C_DIR" clean
-sudo -u "$SUDO_USER" make -C "$C_DIR"
-if [ $? -ne 0 ]; then
+if ! command -v make >/dev/null 2>&1 || ! command -v gcc >/dev/null 2>&1; then
+  echo "Error: missing build tools. Install with: sudo apt-get install -y build-essential"
+  exit 1
+fi
+if ! sudo -u "$SUDO_USER" make -C "$C_DIR" clean || ! sudo -u "$SUDO_USER" make -C "$C_DIR"; then
     echo "Error: Failed to compile the program using 'make' in $C_DIR."
     exit 1
 fi
@@ -144,11 +147,15 @@ echo "Compilation successful. Executable created at: $EXECUTABLE_PATH"
 # 6. Check if the service file already exists
 if [ -f "$SERVICE_FILE" ]; then
   echo "Warning: Service file $SERVICE_FILE already exists."
-  read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-  echo # Move to a new line
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborting. No changes made."
-    exit 1
+  if [[ "${UCTRONICS_ASSUME_YES:-0}" == "1" ]]; then
+    echo "Noninteractive release installation: replacing the existing service unit."
+  else
+    read -r -p "Do you want to overwrite it? (y/N): " -n 1 REPLY
+    echo # Move to a new line
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Aborting. No changes made."
+      exit 1
+    fi
   fi
   echo "Overwriting existing service file."
 fi
@@ -195,7 +202,7 @@ Wants=network-online.target ${DIAG_NAME}.service
 # Consider changing User= to $SUDO_USER if root privileges are not strictly required
 # and the user $SUDO_USER has the necessary hardware permissions (e.g., added to i2c/gpio groups)
 User=root
-# Group= Baset on User
+# Group is determined from User
 WorkingDirectory=$C_DIR
 # Execute the compiled program. Do NOT use '&'. systemd handles backgrounding.
 ExecStart=$EXECUTABLE_PATH
@@ -224,7 +231,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Enabling and starting previous-boot diagnostics..."
-if ! systemctl enable --now "$DIAG_NAME.service"; then
+if ! systemctl enable "$DIAG_NAME.service" || ! systemctl restart "$DIAG_NAME.service"; then
     echo "WARNING: Diagnostic service could not start. See: systemctl status $DIAG_NAME"
 fi
 

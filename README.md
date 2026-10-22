@@ -1,10 +1,79 @@
-[README.md](https://github.com/user-attachments/files/33848545/README.md)
 # U6143_ssd1306 (Geekamacker fork)
 
 UCTRONICS 0.91\" SSD1306 I2C OLED display + a **systemd** service installer, with a rotating multi-page status dashboard.  
 This fork also supports **time-synced page rotation** so multiple Raspberry Pis can stay aligned.
+The GitHub Release workflow and Pi installer are documented below.
 
 ---
+
+## Recommended: install and update directly from GitHub Releases
+
+Once the changes in this repository have been published in a **non-prerelease
+GitHub Release**, you can install or update this OLED dashboard from your Pi
+without cloning the repo, moving ZIP files, or modifying an existing checkout.
+Run these commands as your normal Pi user (not root):
+
+```bash
+curl -fsSLo /tmp/uctronics-install-release.sh \
+  https://raw.githubusercontent.com/Geekamacker/U6143_ssd1306/master/install_release.sh
+bash /tmp/uctronics-install-release.sh
+```
+
+The installer discovers the **latest published release**, downloads the source
+archive and SHA-256 checksum, verifies it, extracts it into a versioned folder
+under `~/.local/share/uctronics-display/releases/`, compiles on the Pi, and
+repoints/restarts the systemd display and boot-diagnostics services. It will
+request sudo where necessary. The old `~/U6143_ssd1306` Git checkout, if any,
+is **left untouched**; however, its locally customized build/header settings
+will **not** automatically be carried into the newly selected release.
+
+Install or roll back to a specific published version:
+
+```bash
+bash /tmp/uctronics-install-release.sh --tag v1.0.0
+```
+
+Each downloaded version stays in its own directory so an older version can be
+reinstalled without re-downloading local files. Re-running the installer for
+the current version is supported.
+
+**Important:** These commands cannot install anything until a release with the
+required asset names has actually been published on GitHub.
+
+### Publishing a release (repository maintainer)
+
+1. Commit the changed source, `install_release.sh`, `scripts/`, `tests/`, and
+   `.github/workflows/release.yml` to the repository's `master` branch.
+2. Open the repository's **Actions** tab and choose **Publish Raspberry Pi release**.
+3. Select **Run workflow**, enter a new version such as `v1.0.0`, and run it.
+4. After the job succeeds, GitHub will have a release with
+   `U6143_ssd1306-rpi.tar.gz` and `U6143_ssd1306-rpi.tar.gz.sha256` attached.
+
+See [`RELEASE_SETUP.md`](RELEASE_SETUP.md) for the one-time publishing steps.
+
+The workflow also publishes releases when a `v*` tag is pushed. For a
+straightforward web-based workflow, **use the manual Actions button**; don't
+also create a duplicate GitHub Release by hand. The Actions workflow requires
+repository Actions to be enabled and `contents: write` permission.
+
+Release packages include the C implementation, both setup/diagnostic scripts,
+and the release downloader. Compilation happens on the Raspberry Pi; the
+GitHub workflow only performs a compile/smoke test on Linux before packaging.
+This workflow does **not** automatically deploy to a Pi, which requires
+access to your own hardware.
+
+### After installation
+
+```bash
+systemctl status uctronics-display.service uctronics-boot-diagnostics.service
+sudo journalctl --list-boots
+sudo cat /var/lib/uctronics-display/last_boot_report.txt
+```
+
+The OLED's **Page 6** reports the previous boot's shutdown status and any
+recognizable journal clue, not a guaranteed root cause. Persistent journaling
+must be enabled separately (see below).
+
 
 ## What it displays (7 pages)
 
@@ -42,7 +111,7 @@ card failure may leave **no final log**, so this page cannot guarantee an answer
 For evidence outside the OLED's two short lines, run:
 
 ```bash
-sudo bash ~/U6143_ssd1306/boot_diagnostics.sh report
+sudo cat /var/lib/uctronics-display/last_boot_report.txt
 sudo journalctl -b -1 -p warning..alert --no-pager
 sudo journalctl -k -b -1 --no-pager | tail -100
 ```

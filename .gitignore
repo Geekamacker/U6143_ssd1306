@@ -1,0 +1,8 @@
+# Raspberry Pi C build outputs
+/C/*.o
+/C/display
+
+# Local packaging/build outputs
+/dist/
+__pycache__/
+*.pyc
