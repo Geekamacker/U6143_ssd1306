@@ -1,0 +1,63 @@
+name: Publish Raspberry Pi release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag, e.g. v1.0.0 (must not already exist)'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: uctronics-release-${{ inputs.version || github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || {
+            echo "Use a version like v1.0.0" >&2
+            exit 1
+          }
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+      - name: Verify source and scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n setup_display_service.sh boot_diagnostics.sh install_release.sh scripts/package_release.sh
+          make -C C clean
+          make -C C
+          python3 tests/test_boot_diagnostics.py
+          bash tests/test_release_install.sh
+      - name: Package release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/package_release.sh dist
+          cd dist
+          sha256sum -c U6143_ssd1306-rpi.tar.gz.sha256
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            dist/U6143_ssd1306-rpi.tar.gz \
+            dist/U6143_ssd1306-rpi.tar.gz.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
+            --generate-notes
