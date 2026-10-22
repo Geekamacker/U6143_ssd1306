@@ -4,6 +4,8 @@
 # Dynamically detects the user's home directory and compiles the program once.
 
 SERVICE_NAME="uctronics-display"
+DIAG_NAME="uctronics-boot-diagnostics"
+DIAG_FILE="/etc/systemd/system/${DIAG_NAME}.service"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 REPO_NAME="U6143_ssd1306" # Name of the repository directory
 
@@ -115,6 +117,10 @@ if [ ! -f "$MAKEFILE_PATH" ]; then
   echo "Error: Makefile not found: $MAKEFILE_PATH."
   exit 1
 fi
+if [ ! -f "$REPO_BASE_DIR/boot_diagnostics.sh" ]; then
+  echo "Error: boot_diagnostics.sh is missing from $REPO_BASE_DIR."
+  exit 1
+fi
 
 # 5. Compile the program (as the original user for correct permissions if needed)
 echo "Compiling the C program in $C_DIR..."
@@ -147,7 +153,30 @@ if [ -f "$SERVICE_FILE" ]; then
   echo "Overwriting existing service file."
 fi
 
-# 7. Create the systemd service file content
+# 7. Create the persistent previous-boot diagnostic unit.
+# This small oneshot records a RUNNING marker on boot and a CLEAN marker
+# during an orderly shutdown. It checks the previous boot's retained journal
+# only once, not repeatedly while the OLED is running.
+echo "Creating diagnostic service file: $DIAG_FILE"
+cat << EOF > "$DIAG_FILE"
+[Unit]
+Description=UCTRONICS Previous Boot Diagnostic Snapshot
+After=local-fs.target systemd-journald.service
+Before=${SERVICE_NAME}.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash $REPO_BASE_DIR/boot_diagnostics.sh start
+ExecStop=/bin/bash $REPO_BASE_DIR/boot_diagnostics.sh stop
+TimeoutStartSec=30s
+TimeoutStopSec=15s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 8. Create the systemd service file content
 # Note: Runs as root by default. Change 'User=' if it should run as a different user.
 # Ensure that user has necessary hardware access permissions (e.g., i2c, gpio groups).
 # If the program needs access to hardware, running as root might be necessary,
@@ -158,8 +187,8 @@ cat << EOF > "$SERVICE_FILE"
 [Unit]
 Description=UCTRONICS C Display Service ($REPO_NAME)
 # Start after basic system initialization and multi-user environment is up
-After=network-online.target
-Wants=network-online.target
+After=network-online.target ${DIAG_NAME}.service
+Wants=network-online.target ${DIAG_NAME}.service
 
 
 [Service]
@@ -170,8 +199,10 @@ User=root
 WorkingDirectory=$C_DIR
 # Execute the compiled program. Do NOT use '&'. systemd handles backgrounding.
 ExecStart=$EXECUTABLE_PATH
-Restart=on-failure # Restart the service if the program crashes
-RestartSec=5s      # Wait 5 seconds before restarting
+# Restart the service if the program crashes
+Restart=on-failure
+# Wait 5 seconds before restarting
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
@@ -192,7 +223,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Enabling the service to start on boot..."
+echo "Enabling and starting previous-boot diagnostics..."
+if ! systemctl enable --now "$DIAG_NAME.service"; then
+    echo "WARNING: Diagnostic service could not start. See: systemctl status $DIAG_NAME"
+fi
+
+echo "Enabling the display service to start on boot..."
 systemctl enable "$SERVICE_NAME.service"
 if [ $? -ne 0 ]; then
     echo "Error: Failed to enable the service $SERVICE_NAME."
@@ -202,8 +238,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Starting the service now..."
-systemctl start "$SERVICE_NAME.service"
+echo "Starting/restarting the display with the newly built executable..."
+systemctl restart "$SERVICE_NAME.service"
 if [ $? -ne 0 ]; then
     # If start fails, the service might still be enabled for next boot. Inform user.
     echo "Warning: Failed to start the service $SERVICE_NAME immediately."
@@ -222,6 +258,7 @@ echo "  sudo systemctl stop $SERVICE_NAME.service    # Stop the service"
 echo "  sudo systemctl start $SERVICE_NAME.service   # Start the service"
 echo "  sudo systemctl disable $SERVICE_NAME.service # Prevent starting on boot"
 echo "  sudo journalctl -u $SERVICE_NAME.service   # View logs"
+echo "  sudo bash $REPO_BASE_DIR/boot_diagnostics.sh report   # Previous boot evidence"
 echo "-----------------------------------------------------"
 
 exit 0
