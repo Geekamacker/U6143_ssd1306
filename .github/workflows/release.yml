@@ -49,16 +49,31 @@ jobs:
           bash scripts/package_release.sh dist
           cd dist
           sha256sum -c U6143_ssd1306-rpi.tar.gz.sha256
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" \
-            dist/U6143_ssd1306-rpi.tar.gz \
-            dist/U6143_ssd1306-rpi.tar.gz.sha256 \
-            --target "$GITHUB_SHA" \
-            --title "$RELEASE_TAG" \
-            --generate-notes
-            --latest
+          assets=(
+            dist/U6143_ssd1306-rpi.tar.gz
+            dist/U6143_ssd1306-rpi.tar.gz.sha256
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Checking assets."
+            existing=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+            for file in "${assets[@]}"; do
+              name=$(basename "$file")
+              if ! grep -Fxq "$name" <<< "$existing"; then
+                gh release upload "$RELEASE_TAG" "$file"
+              else
+                echo "Already attached: $name"
+              fi
+            done
+            gh release edit "$RELEASE_TAG" --latest
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TAG" \
+              --generate-notes --latest
+          fi
