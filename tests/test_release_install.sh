@@ -5,7 +5,7 @@ BASE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/home" "$TMP/assets"
-"$BASE/scripts/package_release.sh" "$TMP/assets" >/dev/null
+bash "$BASE/scripts/package_release.sh" "$TMP/assets" >/dev/null
 cat > "$TMP/bin/curl" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
